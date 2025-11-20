@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phishing Detection System</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Custom Styles for better visual appeal and mobile-first design */
+        :root {
+            --color-safe: #10B981; /* Emerald 500 */
+            --color-risk: #EF4444; /* Red 500 */
+            --color-warning: #F59E0B; /* Amber 500 */
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7fafc; /* Light gray background */
+        }
+        .card {
+            background-color: white;
+            border-radius: 1.5rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            transition: transform 0.3s ease;
+        }
+        /* Custom gradient for the button */
+        .scan-button {
+            background-image: linear-gradient(to right, #4F46E5 0%, #3B82F6 100%);
+            transition: background-color 0.3s ease, transform 0.1s ease;
+            box-shadow: 0 4px 6px rgba(59, 130, 246, 0.5);
+        }
+        .scan-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 8px rgba(59, 130, 246, 0.7);
+        }
+        /* Style for the colored result text */
+        .result-text-safe { color: var(--color-safe); }
+        .result-text-risk { color: var(--color-risk); }
+        .result-text-warning { color: var(--color-warning); }
+
+        /* Animation for loading spinner */
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Explainable AI Feature Bar Styling */
+        .feature-bar-container {
+            position: relative;
+            height: 10px;
+            border-radius: 5px;
+            background-color: #e5e7eb; /* Gray 200 */
+            margin-top: 4px;
+        }
+        .feature-bar-positive, .feature-bar-negative {
+            position: absolute;
+            height: 100%;
+            border-radius: 5px;
+            transition: width 1s ease-in-out;
+        }
+        .feature-bar-positive { background-color: var(--color-risk); } /* Red for Phishing indicators */
+        .feature-bar-negative { background-color: var(--color-safe); } /* Green for Safe indicators */
+
+    </style>
+</head>
+<body class="min-h-screen p-4 flex items-center justify-center">
+
+    <div class="max-w-xl w-full">
+        <!-- Header / Project Title -->
+        <header class="text-center mb-8">
+            <div class="flex items-center justify-center mb-2">
+                <i data-lucide="shield-check" class="w-8 h-8 text-indigo-600 mr-2"></i>
+                <h1 class="text-3xl font-bold text-gray-800">Phishing Detector</h1>
+            </div>
+            <p class="text-gray-500 mt-1">Real-time URL Security Check powered by ML model and Explainable AI</p>
+        </header>
+
+        <!-- Input Card -->
+        <div class="card p-6 mb-8">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Enter URL to Scan</h2>
+            <div class="flex flex-col sm:flex-row gap-4">
+                <input type="url" id="urlInput" placeholder="e.g., https://suspicious-site.com/login" required
+                       class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-gray-800">
+                <button id="scanButton" onclick="scanUrl()"
+                        class="scan-button text-white font-medium py-3 px-6 rounded-lg shadow-lg flex items-center justify-center disabled:opacity-50"
+                        aria-label="Scan URL">
+                    <span id="buttonText">Scan URL</span>
+                    <div id="loadingSpinner" class="spinner hidden"></div>
+                </button>
+            </div>
+            <div id="errorMessage" class="text-red-500 mt-2 text-sm hidden"></div>
+        </div>
+
+        <!-- Results Card (Hidden until scan is complete) -->
+        <div id="resultsCard" class="card p-6 hidden">
+            <div class="flex items-center justify-between mb-4 pb-4 border-b">
+                <h2 class="text-2xl font-bold" id="classificationResult"></h2>
+                <span id="confidenceScore" class="text-sm font-medium px-3 py-1 rounded-full"></span>
+            </div>
+
+            <!-- Explainable AI Section -->
+            <h3 class="text-lg font-semibold text-gray-700 mb-4 flex items-center">
+                <i data-lucide="lightbulb" class="w-5 h-5 text-yellow-600 mr-2"></i>
+                Explainable AI (XAI) Breakdown
+            </h3>
+            <p class="text-sm text-gray-600 mb-4">The model made its decision based on the following features (SHAP values):</p>
+
+            <div id="xaiFeatures" class="space-y-4">
+                <!-- XAI features will be dynamically inserted here -->
+            </div>
+
+            <p class="text-xs text-gray-500 mt-6 pt-4 border-t">
+                
+                *The classification is powered by a trained Machine Learning model (XGBoost) and real SHAP values.
+                &copy; 2025 Phishing Detector Project by Samuel Idakwo.
+            </p>
+        </div>
+    </div>
+
+       <script>
+        // --- Icon Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+        });
+
+        // --- Core Project Variables ---
+        const urlInput = document.getElementById('urlInput');
+        const scanButton = document.getElementById('scanButton');
+        const buttonText = document.getElementById('buttonText');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const resultsCard = document.getElementById('resultsCard');
+        const classificationResult = document.getElementById('classificationResult');
+        const confidenceScore = document.getElementById('confidenceScore');
+        const xaiFeatures = document.getElementById('xaiFeatures');
+        const errorMessage = document.getElementById('errorMessage');
+
+        // Main function to handle the URL scanning process
+        async function scanUrl() {
+            const url = urlInput.value.trim();
+
+            if (!url) {
+                displayError("Please enter a valid URL to scan.");
+                return;
+            }
+
+            // Reset UI and show loading
+            displayError("");
+            resultsCard.classList.add('hidden');
+            setLoading(true);
+
+            try {
+                // 1. Call your Python Backend API
+                // This assumes your Flask app is running on http://127.0.0.1:5000
+                const response = await fetch('http://127.0.0.1:5000/scan', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ url: url })
+                });
+
+                const data = await response.json(); // Get the REAL data from the model
+
+                if (!response.ok) {
+                    // If the server sent an error (e.g., "Model not loaded", "Feature mismatch")
+                    throw new Error(data.error || 'The server returned an error');
+                }
+
+                // 2. Update UI with Results
+                updateResults(data);
+
+            } catch (error) {
+                console.error('Error during scan:', error);
+                displayError('Scan failed: ' + error.message);
+            } finally {
+                // 3. Hide loading, regardless of success or failure
+                setLoading(false);
+            }
+        }
+
+        // Function to control the loading state
+        function setLoading(isLoading) {
+            scanButton.disabled = isLoading;
+            buttonText.textContent = isLoading ? 'Analyzing...' : 'Scan URL';
+            loadingSpinner.classList.toggle('hidden', !isLoading);
+            if (isLoading) {
+                scanButton.classList.add('px-8');
+            } else {
+                scanButton.classList.remove('px-8');
+            }
+        }
+
+        // Function to display error message
+        function displayError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.toggle('hidden', !message);
+        }
+
+        // Function to update the results section
+        // (This function is the same as before, it works with the new API response)
+        function updateResults(data) {
+            resultsCard.classList.remove('hidden');
+
+            const isPhishing = data.is_phishing;
+            // Use confidence from data, not simulation
+            const confidence = (data.confidence * 100).toFixed(2);
+            let resultText, colorClass, scoreClass, iconHtml;
+
+            if (isPhishing) {
+                resultText = "Phishing Detected";
+                colorClass = "result-text-risk";
+                scoreClass = "bg-red-500 text-white";
+                iconHtml = '<i data-lucide="alert-triangle" class="w-6 h-6 mr-2"></i>';
+            } else {
+                resultText = "Legitimate/Safe";
+                colorClass = "result-text-safe";
+                scoreClass = "bg-emerald-500 text-white";
+                iconHtml = '<i data-lucide="check-circle" class="w-6 h-6 mr-2"></i>';
+            }
+
+            classificationResult.innerHTML = `${iconHtml}<span class="${colorClass}">${resultText}</span>`;
+            classificationResult.classList.remove('result-text-risk', 'result-text-safe');
+            classificationResult.classList.add(colorClass, 'flex', 'items-center');
+
+            confidenceScore.textContent = `Confidence: ${confidence}%`;
+            confidenceScore.className = `text-sm font-medium px-3 py-1 rounded-full ${scoreClass}`;
+
+            xaiFeatures.innerHTML = ''; // Clear previous features
+            
+            // Use the real features from the API response
+            data.features.forEach(feature => {
+                const contributionPercent = (feature.contribution).toFixed(1); // Assuming contribution is already 0-100
+                const featureContainer = document.createElement('div');
+                
+                const isNegative = feature.is_negative; // Use the value from the API
+
+                featureContainer.className = `border-l-4 p-3 rounded-r-lg shadow-sm ${
+                    isNegative ? 'border-red-400 bg-red-50' : 'border-emerald-400 bg-emerald-50'
+                }`;
+
+                featureContainer.innerHTML = `
+                    <div class="flex justify-between items-center text-sm font-medium">
+                        <span class="${isNegative ? 'text-red-700' : 'text-emerald-700'}">${feature.name}</span>
+                        <span class="text-xs font-semibold ${isNegative ? 'text-red-500' : 'text-emerald-500'}">
+                           ${isNegative ? 'PHISHING' : 'SAFE'}: +${contributionPercent}% Impact
+                        </span>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">${feature.description}</p>
+                    <div class="feature-bar-container mt-2">
+                        <div class="${isNegative ? 'feature-bar-positive' : 'feature-bar-negative'}" style="width: ${contributionPercent}%"></div>
+                    </div>
+                `;
+                xaiFeatures.appendChild(featureContainer);
+            });
+            
+            // Update the disclaimer note
+            // const disclaimer = resultsCard.querySelector("p.text-xs");
+            // if(disclaimer) {
+            //      disclaimer.innerHTML = `The domain has been in existence for a long time. It has a rich history of safe behavior.`;
+            // }
+
+            lucide.createIcons();
+        }
+
+        // Listen for Enter key on the input field
+        urlInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                scanUrl();
+            }
+        });
+
+    </script>
+</body>
+</html>
