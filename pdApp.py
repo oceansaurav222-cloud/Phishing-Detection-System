@@ -1,5 +1,5 @@
 import joblib
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import numpy as np
 import pandas as pd  # We still need this for the features_df
@@ -14,6 +14,10 @@ from datetime import datetime, timezone # <-- Added timezone
 
 app = Flask(__name__)
 CORS(app) 
+
+@app.route('/')
+def index():
+    return send_from_directory('.', 'index.html')
 
 # ** THIS IS THE CORRECT 57-FEATURE LIST **
 REALISTIC_FEATURES = [
